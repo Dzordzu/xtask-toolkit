@@ -9,7 +9,8 @@ pub struct DirCompress {
 }
 
 impl DirCompress {
-    pub fn new(dir: PathBuf) -> Option<Self> {
+    pub fn new<T>(dir: T) -> Option<Self> where T: Into<PathBuf> {
+        let dir : PathBuf = dir.into();
         dir.is_dir().then_some(Self {
             dir,
             filter_filenames: Vec::new(),
@@ -31,6 +32,11 @@ impl DirCompress {
 
     pub fn filter_filename_regex(&mut self, regex: regex::Regex) -> &mut Self {
         self.filter_filename_regex = Some(regex);
+        self
+    }
+
+    pub fn filter_filename(&mut self, filename: &str) -> &mut Self {
+        self.filter_filenames.push(filename.to_string());
         self
     }
 

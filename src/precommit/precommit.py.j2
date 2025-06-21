@@ -8,7 +8,7 @@ import subprocess
 def get_project_root():
     return subprocess.getoutput("git rev-parse --show-toplevel")
 
-{%- if features.gitleaks -%}
+{%- if features.gitleaks %}
 def gitleaks_enabled():
     """Determine if the pre-commit hook for gitleaks is enabled."""
     out = subprocess.getoutput("git config --bool hooks.gitleaks")
@@ -28,19 +28,19 @@ To disable the gitleaks precommit hook run the following command:
         )
         sys.exit(1)
 
-{%- endif -%}
+{%- endif %}
 
-{%- if features.taplo -%}
+{%- if features.taplo %}
 def handle_taplo():
     if not os.environ.get("COMMIT_SKIP_TAPLO"):
         exitcode = os.WEXITSTATUS(os.system("taplo format --check"))
         if exitcode != 0:
             print("found taplo errors. (set COMMIT_SKIP_TAPLO=1 to skip this check)")
             sys.exit(1)
-{%- endif -%}
+{%- endif %}
 
 
-{%- if features.cargo -%}
+{%- if features.cargo %}
 def handle_cargo():
     if not os.environ.get("COMMIT_SKIP_FMT"):
         exitcode = os.WEXITSTATUS(os.system("cargo fmt --check"))
@@ -57,19 +57,19 @@ def handle_cargo():
                 "found clippy warnings. (set COMMIT_SKIP_CLIPPY=1 to skip this check)"
             )
             sys.exit(1)
-{%- endif -%}
+{%- endif %}
 
 
-{% if features.cargo -%}
+{%- if features.cargo %}
 handle_cargo()
 {% endif %}
 
-{% if features.taplo -%}
+{%- if features.taplo %}
 handle_taplo()
 {% endif %}
 
 
-{% if features.gitleaks -%}
+{%- if features.gitleaks %}
 if gitleaks_enabled():
     handle_gitleaks()
 else:
@@ -77,7 +77,7 @@ else:
         "gitleaks precommit disabled\
      (enable with `git config hooks.gitleaks true`)"
     )
-{% endif %}
+{%- endif %}
 
 {#
    vim: ft=python.jinja2

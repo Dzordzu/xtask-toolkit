@@ -1,6 +1,6 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use xshell::{Shell, cmd};
+use xshell::{cmd, Shell};
 
 #[derive(serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -52,14 +52,20 @@ pub enum ReleaseMode {
 }
 
 impl Release {
-    pub fn new(name: &str, version: &str, mode: ReleaseMode) -> Option<Self> {
-        let version = semver::Version::parse(version).ok()?;
-        Some(Release {
+    pub fn new(name: &str, version: &str) -> Result<Self, semver::Error> {
+        let version = semver::Version::parse(version)?;
+        Ok(Release {
             name: name.to_string(),
             version,
-            draft: matches!(mode, ReleaseMode::Draft),
-            prelease: matches!(mode, ReleaseMode::Prerelease),
+            draft: false,
+            prelease: false,
         })
+    }
+
+    pub fn with_release_mode(&mut self, mode: ReleaseMode) -> &mut Self {
+        self.draft = matches!(mode, ReleaseMode::Draft);
+        self.prelease = matches!(mode, ReleaseMode::Prerelease);
+        self
     }
 
     pub fn get_from_gh() -> Result<Vec<Self>, GetFromGHError> {
@@ -73,11 +79,15 @@ impl Release {
             .collect())
     }
 
-    pub fn release(&self, files: Vec<PathBuf>) -> Result<(), xshell::Error> {
+    pub fn release<T, I>(&self, files: T) -> Result<String, xshell::Error>
+    where
+        T: IntoIterator<Item = I>,
+        I: AsRef<Path> + Sized,
+    {
         let sh = Shell::new()?;
         let files = files
-            .iter()
-            .map(|x| x.display().to_string())
+            .into_iter()
+            .map(|x| x.as_ref().display().to_string())
             .collect::<Vec<_>>();
 
         let name = self.name.clone();
@@ -87,6 +97,6 @@ impl Release {
         sh.cmd("gh")
             .args(["release", "create", "generate-notes", draft, &name])
             .args(files)
-            .run()
+            .read()
     }
 }

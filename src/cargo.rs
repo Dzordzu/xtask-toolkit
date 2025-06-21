@@ -4,8 +4,12 @@ use std::{env, fs};
 
 use xshell::{Shell, cmd};
 
+#[derive(Debug, thiserror::Error)]
 pub enum ProjectRootError {
+    #[error("Unspecified IO error during project root discovery: {0}")]
     Io(std::io::Error),
+
+    #[error("Project root (Cargo.lock) cannot be found")]
     MissingCargoLock,
 }
 
@@ -28,11 +32,20 @@ pub fn get_project_root() -> Result<PathBuf, ProjectRootError> {
     Err(ProjectRootError::MissingCargoLock)
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct CargoToml(PathBuf);
 
 impl CargoToml {
-    pub fn find_all<P: AsRef<Path>>(dir: P) -> Vec<Self> {
+
+    pub fn autodiscovery() -> Vec<Self> {
+        Self::autodiscovery_with(&[])
+    }
+
+    pub fn autodiscovery_with(additional_filenames: &[&str]) -> Vec<Self> {
+        get_project_root().map(|p| Self::find_all(&p, additional_filenames)).unwrap_or_default()
+    }
+
+    pub fn find_all<P: AsRef<Path>>(dir: P, additional_filenames: &[&str]) -> Vec<Self> {
         let mut matches = Vec::new();
         let target_name = "Cargo.toml";
 
@@ -41,9 +54,9 @@ impl CargoToml {
                 let path = entry.path();
 
                 if path.is_dir() {
-                    matches.extend(Self::find_all(&path));
+                    matches.extend(Self::find_all(&path, additional_filenames));
                 } else if let Some(file_name) = path.file_name().and_then(|s| s.to_str()) {
-                    if file_name == target_name {
+                    if file_name == target_name || additional_filenames.contains(&file_name) {
                         matches.push(Self(path));
                     }
                 }
@@ -52,7 +65,7 @@ impl CargoToml {
 
         matches
     }
-    pub fn find_first<P: AsRef<Path>>(dir: P) -> Option<Self> {
+    pub fn find_first<P: AsRef<Path>>(dir: P, additional_filenames: &[&str]) -> Option<Self> {
         let target_name = "Cargo.toml";
 
         let mut entries = match fs::read_dir(&dir) {
@@ -67,7 +80,7 @@ impl CargoToml {
 
             if path.is_file() {
                 if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
-                    if name == target_name {
+                    if name == target_name || additional_filenames.contains(&name) {
                         return Some(Self(path));
                     }
                 }
@@ -77,7 +90,7 @@ impl CargoToml {
         for entry in entries {
             let path = entry.path();
             if path.is_dir() {
-                if let Some(found) = Self::find_first(&path) {
+                if let Some(found) = Self::find_first(&path, additional_filenames) {
                     return Some(found);
                 }
             }
@@ -104,6 +117,10 @@ impl CargoToml {
         result.try_into().ok()
     }
 
+    pub fn path<'a>(&self) -> &Path {
+        &self.0
+    }
+
     pub fn version(&self) -> Option<String> {
         self.get_toml_key(&["package", "version"])
     }
@@ -123,19 +140,44 @@ impl CargoToml {
     pub fn description(&self) -> Option<String> {
         self.get_toml_key(&["package", "description"])
     }
+
+    pub fn versioned_name(&self) -> Option<String> {
+        let name = self.name();
+        let version = self.version();
+        name.zip(version).map(|(name, version)| format!("{}-{}", name, version))
+    }
 }
 
 pub struct BinaryBuild {
-    pub projects: Vec<String>,
-    pub target: Option<String>,
+    projects: Vec<String>,
+    target: Option<String>,
 }
 
 impl BinaryBuild {
-    pub fn new(projects: &[&str], target: Option<&str>) -> Self {
+    pub fn new() -> Self {
         Self {
-            projects: projects.iter().map(|x| x.to_string()).collect(),
-            target: target.map(|x| x.to_string()),
+            projects: Vec::new(),
+            target: None,
         }
+    }
+
+    pub fn with_project(&mut self, project: &str) -> &mut Self {
+        self.projects.push(project.to_string());
+        self
+    }
+
+    pub fn with_projects<T, I>(&mut self, projects: I) -> &mut Self
+    where
+        I: IntoIterator<Item = T>,
+        T: ToString,
+    {
+        self.projects.extend(projects.into_iter().map(|x| x.to_string()));
+        self
+    }
+
+    pub fn with_target(&mut self, target: &str) -> &mut Self {
+        self.target = Some(target.to_string());
+        self
     }
 
     pub fn build(&self) -> Result<(), xshell::Error> {
@@ -146,8 +188,6 @@ impl BinaryBuild {
         let cmd = sh.cmd("cargo").args([
             "build",
             "--release",
-            "--target",
-            "x86_64-unknown-linux-musl",
         ]);
 
         let cmd = if let Some(target) = &self.target {
@@ -156,7 +196,7 @@ impl BinaryBuild {
             cmd
         };
 
-        cmd.args(projects).read()?;
+        cmd.args(projects).run()?;
 
         Ok(())
     }

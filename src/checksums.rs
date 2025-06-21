@@ -1,8 +1,9 @@
-use std::path::Path;
 use std::collections::HashMap;
+use std::path::Path;
 
 pub use sha2;
 use sha2::{Digest, Sha256};
+use walkdir::WalkDir;
 
 #[derive(Debug, Eq, PartialEq, Hash, Clone)]
 pub struct Checksum(String);
@@ -17,12 +18,19 @@ fn strfilename(path: &std::path::Path) -> String {
 
 pub trait PathChecksum {
     fn calculate_sha256(&self) -> Result<Checksum, std::io::Error>;
+    fn calculate_sha256_filtered(
+        &self,
+        filter: fn(&std::path::Path) -> bool,
+    ) -> Result<Checksum, std::io::Error>;
     fn calculate_entries_sha256(&self) -> Result<HashMap<String, Checksum>, std::io::Error>;
 }
 
 impl PathChecksum for Path {
-    fn calculate_sha256(&self) -> Result<Checksum, std::io::Error> {
-        if !self.is_dir() {
+    fn calculate_sha256_filtered(
+        &self,
+        filter: fn(&std::path::Path) -> bool,
+    ) -> Result<Checksum, std::io::Error> {
+        if self.is_file() {
             let binary_content = std::fs::read(&self)?;
 
             let mut hasher = Sha256::new();
@@ -31,8 +39,15 @@ impl PathChecksum for Path {
         } else {
             let mut result = String::new();
 
-            for entry in self.read_dir()? {
-                result += &entry?.path().calculate_sha256()?.0;
+            for entry in WalkDir::new(self)
+                .sort_by_file_name()
+                .into_iter()
+                .filter(|entry| entry.as_ref().is_ok_and(|x| filter(x.path())))
+                .filter_map(Result::ok)
+            {
+                if entry.file_type().is_file() {
+                    result += &entry.path().calculate_sha256()?.0;
+                }
             }
 
             let mut hasher = Sha256::new();
@@ -58,6 +73,10 @@ impl PathChecksum for Path {
 
         Ok(result)
     }
+
+    fn calculate_sha256(&self) -> Result<Checksum, std::io::Error> {
+        self.calculate_sha256_filtered(|_| true)
+    }
 }
 
 impl Checksum {
@@ -74,13 +93,16 @@ pub trait ChecksumsToFile {
     fn save_checksum(&self, path: &std::path::Path) -> Result<(), std::io::Error>;
 }
 
-impl ChecksumsToFile for std::collections::HashMap<String, Checksum> {
+impl<T> ChecksumsToFile for T
+where
+    T: Iterator<Item = (String, Checksum)> + Clone
+{
     fn save_checksum(&self, path: &std::path::Path) -> Result<(), std::io::Error> {
         use std::io::Write;
 
         let mut file = std::fs::File::create(path)?;
 
-        let checksum_contents = self.iter().fold(String::new(), |acc, x| {
+        let checksum_contents = self.clone().fold(String::new(), |acc, x| {
             format!("{}{} {}\n", acc, x.0, x.1.get())
         });
 

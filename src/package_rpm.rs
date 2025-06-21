@@ -1,8 +1,8 @@
 use std::collections::HashMap;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::cargo::CargoToml;
-use crate::git::{LastCommitError, OriginUrl, last_commit_date};
+use crate::git::{last_commit_date, LastCommitError, OriginUrl};
 use crate::linux_utils::SystemdUnit;
 use crate::package_utils::buildhost;
 use rpm::PackageBuilder;
@@ -13,6 +13,12 @@ pub struct Package {
     create_user: Option<String>,
     systemd_units: HashMap<PathBuf, SystemdUnit>,
     arch: Option<String>,
+
+    include_binary: bool,
+    binary_dest: PathBuf,
+    binary_dest_filename: String,
+    binary_dest_mode: rpm::FileMode,
+    binary_src_archname: String,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -29,17 +35,30 @@ pub enum PackageError {
     #[error("Missing key {0} in Cargo.toml")]
     MissingKey(String),
 
-    #[error(transparent)]
+    #[error("Failed to create systemd unit file: {0}")]
     SystemdFileError(rpm::Error),
+
+    #[error("Failed to create destination for binary: {0}\nPath: {1}")]
+    BinaryDestinationError(rpm::Error, PathBuf),
+
+    #[error(transparent)]
+    ProjectRootError(#[from] crate::cargo::ProjectRootError),
 }
 
 impl Package {
     pub fn new(cargo_toml: CargoToml) -> Self {
+        let binary_dest_filename = cargo_toml.name().unwrap_or_default();
         Self {
             cargo_toml,
             create_user: None,
             systemd_units: HashMap::new(),
             arch: None,
+
+            include_binary: true,
+            binary_dest: PathBuf::from("/usr/bin"),
+            binary_dest_filename,
+            binary_dest_mode: rpm::FileMode::regular(0o755),
+            binary_src_archname: "release".to_string(),
         }
     }
 
@@ -50,6 +69,27 @@ impl Package {
 
     pub fn with_user(mut self, user: String) -> Self {
         self.create_user = Some(user);
+        self
+    }
+
+    pub fn with_binary_destination<P>(mut self, path: P) -> Self
+    where
+        P: AsRef<Path>,
+    {
+        self.binary_dest = path.as_ref().to_path_buf();
+        self
+    }
+
+    pub fn with_binary_filename<S>(mut self, name: S) -> Self
+    where
+        S: Into<String>,
+    {
+        self.binary_dest_filename = name.into();
+        self
+    }
+
+    pub fn with_binary_mode(mut self, mode: u16) -> Self {
+        self.binary_dest_mode = rpm::FileMode::regular(mode);
         self
     }
 
@@ -67,8 +107,26 @@ impl Package {
         Ok(self)
     }
 
-    pub fn with_sytemd_units(mut self, paths: Vec<PathBuf>) -> Result<Self, Self> {
-        let unit_names= paths.iter().filter(|x| x.file_name().is_some()).count();
+    /// Set this, if you are not using --release dir
+    pub fn with_binary_src_archname<S>(mut self, name: S) -> Self
+    where
+        S: Into<String>,
+    {
+        self.binary_src_archname = format!("{}/release", name.into());
+        self
+    }
+
+    pub fn with_sytemd_units<T, I>(mut self, paths: T) -> Result<Self, Self>
+    where
+        T: IntoIterator<Item = I>,
+        I: AsRef<Path>,
+    {
+        let paths: Vec<PathBuf> = paths
+            .into_iter()
+            .map(|x| x.as_ref().to_path_buf())
+            .collect();
+        let unit_names = paths.iter().filter(|x| x.file_name().is_some()).count();
+
         if unit_names != paths.len() {
             return Err(self);
         } else {
@@ -77,6 +135,12 @@ impl Package {
             }
             Ok(self)
         }
+    }
+    
+    /// Flag to skip binary file automatic inclusion
+    pub fn dont_include_binary(mut self) -> Self {
+        self.include_binary = false;
+        self
     }
 
     fn rpm_post_uninstall() -> String {
@@ -196,6 +260,21 @@ impl Package {
             .compression(compression)
             .url(url.get());
 
+        let binary_source = crate::cargo::get_project_root()?
+            .join("target")
+            .join(&self.binary_src_archname)
+            .join(&package_name);
+
+        let result = if self.include_binary {
+            let binary_dest = self.binary_dest.join(&self.binary_dest_filename);
+            let binary_options = rpm::FileOptions::new(binary_dest.to_string_lossy())
+                .mode(self.binary_dest_mode);
+            result
+                .with_file(&binary_source, binary_options)
+                .map_err(|e| PackageError::BinaryDestinationError(e, binary_source))?
+        } else {
+            result
+        };
         self.add_hooks(result)
     }
 }

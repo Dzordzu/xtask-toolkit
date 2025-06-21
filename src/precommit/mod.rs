@@ -2,7 +2,7 @@ use minijinja::{Environment, context};
 
 pub const PRECOMMIT_TEMPLATE: &str = include_str!("precommit.py.j2");
 
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, serde::Deserialize, serde::Serialize)]
 pub struct Features {
     pub cargo: bool,
     pub taplo: bool,
@@ -42,9 +42,7 @@ pub fn install_precommit(features: Features) -> Result<(), PrecommitError> {
     env.add_template("precommit", PRECOMMIT_TEMPLATE)?;
     let tmpl = env.get_template("precommit")?;
     let context = context!(
-        cargo => features.cargo,
-        taplo => features.taplo,
-        gitleaks => features.gitleaks
+        features => features,
     );
     let rendered = tmpl.render(context)?;
 
