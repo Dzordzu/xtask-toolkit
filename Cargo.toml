@@ -1,7 +1,7 @@
 [package]
 name = "xtask-toolkit"
 description = "A collection of useful tools for xtask building"
-version = "0.1.1"
+version = "0.1.2"
 license = "MIT OR Apache-2.0"
 edition = "2021"
 repository = "https://github.com/dzordzu/xtask-toolkit"
@@ -15,7 +15,7 @@ linux-utils = []
 python-maturin = []
 package-deb = ["dep:rustix", "linux-utils", "git", "cargo", "dep:serde"]
 package-rpm = ["dep:rpm", "dep:rustix", "linux-utils", "git", "cargo", "dep:serde"]
-git-precommit = ["dep:minijinja", "cargo"]
+git-precommit = ["dep:minijinja", "cargo", "git"]
 targz = ["dep:tar", "dep:flate2", "dep:walkdir", "dep:regex"]
 
 [dependencies]
