@@ -1,3 +1,5 @@
+use std::path::{Path, PathBuf};
+
 pub struct LinuxUser(pub String);
 
 impl LinuxUser {
@@ -19,6 +21,30 @@ impl LinuxUser {
 
 #[derive(Debug)]
 pub struct SystemdUnit(pub String);
+
+impl TryFrom<&Path> for SystemdUnit
+{
+    type Error = ();
+
+    fn try_from(value: &Path) -> Result<Self, Self::Error> {
+        Ok(Self(
+            value
+                .file_name()
+                .ok_or(())?
+                .to_string_lossy()
+                .to_string(),
+        ))
+    }
+}
+
+impl TryFrom<&PathBuf> for SystemdUnit
+{
+    type Error = ();
+
+    fn try_from(value: &PathBuf) -> Result<Self, Self::Error> {
+        Self::try_from(value.as_path())
+    }
+}
 
 impl SystemdUnit {
     pub fn bash_reload_daemon() -> String {
@@ -43,5 +69,4 @@ impl SystemdUnit {
             &self.0, &self.0
         )
     }
-
 }
