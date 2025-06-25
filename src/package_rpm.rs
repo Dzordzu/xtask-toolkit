@@ -202,7 +202,7 @@ impl Package {
             .iter()
             .fold(Ok(builder), |builder, unit| {
                 if let Ok(builder) = builder {
-                    let dest_path = format!("/etc/systemd/system/{}", unit.0.to_string_lossy());
+                    let dest_path = format!("/etc/systemd/system/{}", unit.0.file_name().expect("could not get a filename for systemd unit"));
                     let file_opts =
                         rpm::FileOptions::new(dest_path).mode(rpm::FileMode::regular(0o644));
                     builder
