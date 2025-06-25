@@ -136,7 +136,7 @@ impl Package {
             Ok(self)
         }
     }
-    
+
     /// Flag to skip binary file automatic inclusion
     pub fn dont_include_binary(mut self) -> Self {
         self.include_binary = false;
@@ -202,7 +202,13 @@ impl Package {
             .iter()
             .fold(Ok(builder), |builder, unit| {
                 if let Ok(builder) = builder {
-                    let dest_path = format!("/etc/systemd/system/{}", unit.0.file_name().expect("could not get a filename for systemd unit"));
+                    let dest_path = format!(
+                        "/etc/systemd/system/{}",
+                        unit.0
+                            .file_name()
+                            .expect("could not get a filename for systemd unit")
+                            .to_string_lossy()
+                    );
                     let file_opts =
                         rpm::FileOptions::new(dest_path).mode(rpm::FileMode::regular(0o644));
                     builder
@@ -267,8 +273,8 @@ impl Package {
 
         let result = if self.include_binary {
             let binary_dest = self.binary_dest.join(&self.binary_dest_filename);
-            let binary_options = rpm::FileOptions::new(binary_dest.to_string_lossy())
-                .mode(self.binary_dest_mode);
+            let binary_options =
+                rpm::FileOptions::new(binary_dest.to_string_lossy()).mode(self.binary_dest_mode);
             result
                 .with_file(&binary_source, binary_options)
                 .map_err(|e| PackageError::BinaryDestinationError(e, binary_source))?
