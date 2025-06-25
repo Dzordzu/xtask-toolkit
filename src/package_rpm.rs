@@ -95,14 +95,12 @@ impl Package {
 
     pub fn with_systemd_unit(mut self, path: PathBuf) -> Result<Self, Self> {
         // this little monster is caused because of the false borrow checker error (self moved)
-        let unit_name = path.file_name();
-        if path.file_name().is_none() {
+        let unit: Result<SystemdUnit, ()> = path.as_path().try_into();
+        if unit.is_err() {
             return Err(self);
         }
-        let unit_name = unit_name.unwrap().to_string_lossy().to_string();
 
-        self.systemd_units
-            .insert(path.clone(), SystemdUnit(unit_name));
+        self.systemd_units.insert(path.clone(), unit.unwrap());
 
         Ok(self)
     }
@@ -161,7 +159,13 @@ impl Package {
 
     fn rpm_pre_uninstall(&self) -> String {
         let uninstallation_units = self.systemd_units.iter().fold(Vec::new(), |mut acc, unit| {
-            if unit.0.ends_with(".timer") || unit.0.ends_with(".service") {
+            let unit_name = unit
+                .0
+                .file_name()
+                .map(|x| x.to_string_lossy())
+                .unwrap_or_default();
+
+            if unit_name.ends_with(".timer") || unit_name.ends_with(".service") {
                 acc.push(unit);
             }
             acc
