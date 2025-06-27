@@ -14,6 +14,7 @@ pub struct Package {
     create_group: Option<String>,
     systemd_units: HashMap<PathBuf, SystemdUnit>,
     arch: Option<String>,
+    kept_files_after_uninstall: Vec<PathBuf>,
 
     include_binary: bool,
     binary_dest: PathBuf,
@@ -61,24 +62,44 @@ impl Package {
             binary_dest_filename,
             binary_dest_mode: rpm::FileMode::regular(0o755),
             binary_src_archname: "release".to_string(),
+            kept_files_after_uninstall: Vec::new(),
         }
     }
 
+    /// Define arch of the built package
     pub fn with_arch(mut self, arch: String) -> Self {
         self.arch = Some(arch);
         self
     }
 
-    pub fn with_user<T>(mut self, user: T) -> Self where T: ToString {
+    /// Create user on package installation
+    pub fn with_user<T>(mut self, user: T) -> Self
+    where
+        T: ToString,
+    {
         self.create_user = Some(user.to_string());
         self
     }
 
-    pub fn with_group<T>(mut self, group: T) -> Self where T: ToString {
+    /// Create group on package installation
+    pub fn with_group<T>(mut self, group: T) -> Self
+    where
+        T: ToString,
+    {
         self.create_group = Some(group.to_string());
         self
     }
 
+    /// Save these files with .rpmsave suffix before removal
+    pub fn keep_file_after_removal<P>(mut self, path: P) -> Self
+    where
+        P: AsRef<Path>,
+    {
+        self.kept_files_after_uninstall.push(path.as_ref().to_path_buf());
+        self
+    }
+
+    /// Save binary under different path than /usr/bin/
     pub fn with_binary_destination<P>(mut self, path: P) -> Self
     where
         P: AsRef<Path>,
@@ -87,6 +108,7 @@ impl Package {
         self
     }
 
+    /// Save binary under different filename
     pub fn with_binary_filename<S>(mut self, name: S) -> Self
     where
         S: Into<String>,
@@ -95,11 +117,13 @@ impl Package {
         self
     }
 
+    /// Change mode of the binary. Default value is 0755
     pub fn with_binary_mode(mut self, mode: u16) -> Self {
         self.binary_dest_mode = rpm::FileMode::regular(mode);
         self
     }
 
+    /// Automagically restarts the following units on reinstall. Reloads daemon on install
     pub fn with_systemd_unit(mut self, path: PathBuf) -> Result<Self, Self> {
         // this little monster is caused because of the false borrow checker error (self moved)
         let unit: Result<SystemdUnit, ()> = path.as_path().try_into();
@@ -112,6 +136,8 @@ impl Package {
         Ok(self)
     }
 
+    /// Use target/<path>/release directory for binary files
+    ///
     /// Set this, if you are not using --release dir
     pub fn with_binary_src_archname<S>(mut self, name: S) -> Self
     where
@@ -161,11 +187,15 @@ impl Package {
 
         if let Some(create_user) = &self.create_user {
             result = crate::linux_utils::LinuxUser(create_user.clone()).bash_add()
-        } 
+        }
 
         if let Some(create_group) = &self.create_group {
-            result = format!("{}; {}", result, crate::linux_utils::LinuxGroup(create_group.clone()).bash_add())
-        } 
+            result = format!(
+                "{}\n{}",
+                result,
+                crate::linux_utils::LinuxGroup(create_group.clone()).bash_add()
+            )
+        }
 
         result
     }
@@ -186,6 +216,10 @@ impl Package {
 
         let remove = uninstallation_units.iter().fold(String::new(), |acc, x| {
             format!("{}\n{}", acc, x.1.bash_disable_and_stop())
+        });
+
+        let remove = self.kept_files_after_uninstall.iter().fold(remove, |acc, x| {
+            format!("{}\ncp {x:?} {x:?}.$(date '+%Y-%m-%d').rpmsave;", acc)
         });
 
         let restart = uninstallation_units.iter().fold(String::new(), |acc, x| {
