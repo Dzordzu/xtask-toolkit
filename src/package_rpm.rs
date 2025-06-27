@@ -69,13 +69,13 @@ impl Package {
         self
     }
 
-    pub fn with_user(mut self, user: String) -> Self {
-        self.create_user = Some(user);
+    pub fn with_user<T>(mut self, user: T) -> Self where T: ToString {
+        self.create_user = Some(user.to_string());
         self
     }
 
-    pub fn with_group(mut self, group: String) -> Self {
-        self.create_group = Some(group);
+    pub fn with_group<T>(mut self, group: T) -> Self where T: ToString {
+        self.create_group = Some(group.to_string());
         self
     }
 
