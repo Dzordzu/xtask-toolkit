@@ -194,7 +194,16 @@ impl Package {
                 "{}\n{}",
                 result,
                 crate::linux_utils::LinuxGroup(create_group.clone()).bash_add()
-            )
+            );
+
+            if let Some(user) = &self.create_user {
+                result = format!(
+                    "{}\nusermod -aG {} {}",
+                    result,
+                    create_group,
+                    user
+                );
+            }
         }
 
         result

@@ -25,7 +25,7 @@ impl LinuxGroup {
         format!(
             r#"
         if [ -z "$(getent group | grep {group})" ]; then 
-            groupadd {group};
+            groupadd -r {group};
         fi
     "#,
             group = &self.0
