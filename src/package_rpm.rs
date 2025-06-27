@@ -11,6 +11,7 @@ use rpm::PackageBuilder;
 pub struct Package {
     cargo_toml: CargoToml,
     create_user: Option<String>,
+    create_group: Option<String>,
     systemd_units: HashMap<PathBuf, SystemdUnit>,
     arch: Option<String>,
 
@@ -51,6 +52,7 @@ impl Package {
         Self {
             cargo_toml,
             create_user: None,
+            create_group: None,
             systemd_units: HashMap::new(),
             arch: None,
 
@@ -69,6 +71,11 @@ impl Package {
 
     pub fn with_user(mut self, user: String) -> Self {
         self.create_user = Some(user);
+        self
+    }
+
+    pub fn with_group(mut self, group: String) -> Self {
+        self.create_group = Some(group);
         self
     }
 
@@ -150,11 +157,17 @@ impl Package {
     }
 
     fn rpm_pre_install(&self) -> String {
+        let mut result = String::new();
+
         if let Some(create_user) = &self.create_user {
-            crate::linux_utils::LinuxUser(create_user.clone()).bash_add()
-        } else {
-            "".to_string()
-        }
+            result = crate::linux_utils::LinuxUser(create_user.clone()).bash_add()
+        } 
+
+        if let Some(create_group) = &self.create_group {
+            result = format!("{}; {}", result, crate::linux_utils::LinuxGroup(create_group.clone()).bash_add())
+        } 
+
+        result
     }
 
     fn rpm_pre_uninstall(&self) -> String {

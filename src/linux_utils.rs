@@ -1,6 +1,7 @@
 use std::path::{Path, PathBuf};
 
 pub struct LinuxUser(pub String);
+pub struct LinuxGroup(pub String);
 
 impl LinuxUser {
     pub fn bash_add(&self) -> String {
@@ -16,6 +17,23 @@ impl LinuxUser {
 
     pub fn bash_remove(&self) -> String {
         format!("userdel -r {};", &self.0)
+    }
+}
+
+impl LinuxGroup {
+    pub fn bash_add(&self) -> String {
+        format!(
+            r#"
+        if [ -z "$(getent group | grep {group})" ]; then 
+            groupadd {group};
+        fi
+    "#,
+            group = &self.0
+        )
+    }
+
+    pub fn bash_remove(&self) -> String {
+        format!("groupdel {};", &self.0)
     }
 }
 
