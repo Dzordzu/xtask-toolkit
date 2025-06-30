@@ -6,8 +6,12 @@ use xshell::{cmd, Shell};
 #[serde(rename_all = "camelCase")]
 struct GhResponse {
     pub tag_name: String,
+
+    #[serde(default)]
     pub is_draft: bool,
-    pub is_prelease: bool,
+
+    #[serde(default)]
+    pub is_prerelease: bool,
 }
 
 pub struct Release {
@@ -28,7 +32,7 @@ impl TryFrom<GhResponse> for Release {
             name: name.to_string(),
             version,
             draft: value.is_draft,
-            prelease: value.is_prelease,
+            prelease: value.is_prerelease,
         })
     }
 }
@@ -70,8 +74,9 @@ impl Release {
 
     pub fn get_from_gh() -> Result<Vec<Self>, GetFromGHError> {
         let sh = Shell::new()?;
-        let previous_releases: Vec<GhResponse> =
-            serde_json::from_str(&cmd!(sh, "gh release list --json tagName").read()?)?;
+        let previous_releases: Vec<GhResponse> = serde_json::from_str(
+            &cmd!(sh, "gh release list --json tagName,isDraft,isPrerelease").read()?,
+        )?;
 
         Ok(previous_releases
             .into_iter()
@@ -92,10 +97,12 @@ impl Release {
 
         let name = self.name.clone();
 
-        let draft = if self.draft { " --draft" } else { "" };
+        let cmd = sh.cmd("gh")
+            .args(["release", "create", &name, "--generate-notes"]);
 
-        sh.cmd("gh")
-            .args(["release", "create", "generate-notes", draft, &name])
+        let cmd = if self.draft { cmd.arg(" --draft") } else { cmd };
+
+        cmd
             .args(files)
             .read()
     }

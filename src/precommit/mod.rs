@@ -1,4 +1,6 @@
-use minijinja::{Environment, context};
+use std::os::unix::fs::PermissionsExt;
+
+use minijinja::{context, Environment};
 
 pub const PRECOMMIT_TEMPLATE: &str = include_str!("precommit.py.j2");
 
@@ -49,7 +51,8 @@ pub fn install_precommit(features: Features) -> Result<(), PrecommitError> {
     let root = crate::git::get_root_path()?;
     let dest = root.join(".git").join("hooks").join("pre-commit");
 
-    std::fs::write(dest, rendered.as_bytes())?;
+    std::fs::write(&dest, rendered.as_bytes())?;
+    std::fs::set_permissions(dest, std::fs::Permissions::from_mode(0o755))?;
 
     Ok(())
 }
