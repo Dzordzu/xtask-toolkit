@@ -144,7 +144,7 @@ impl CargoToml {
     pub fn versioned_name(&self) -> Option<String> {
         let name = self.name();
         let version = self.version();
-        name.zip(version).map(|(name, version)| format!("{}-{}", name, version))
+        name.zip(version).map(|(name, version)| crate::versioned_name(&name, &version))
     }
 }
 

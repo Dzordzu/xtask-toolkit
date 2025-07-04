@@ -95,10 +95,10 @@ impl Release {
             .map(|x| x.as_ref().display().to_string())
             .collect::<Vec<_>>();
 
-        let name = self.name.clone();
+        let release_name = crate::versioned_name(&self.name, &self.version.to_string());
 
         let cmd = sh.cmd("gh")
-            .args(["release", "create", &name, "--generate-notes"]);
+            .args(["release", "create", &release_name, "--generate-notes"]);
 
         let cmd = if self.draft { cmd.arg(" --draft") } else { cmd };
 

@@ -1,3 +1,7 @@
+fn versioned_name(name: &str, version: &str) -> String {
+    format!("{name}-{version}")
+}
+
 #[cfg(feature = "cargo")]
 pub mod cargo;
 
